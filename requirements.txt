@@ -1,2 +1,9 @@
 streamlit
 openai
+crewai
+requests
+pymupdf
+pysqlite3-binary
+protobuf
+numpy
+jiter
