@@ -1,9 +1,9 @@
 streamlit
-openai
-crewai
 requests
-pymupdf
+PyMuPDF
+crewai
+chromadb
 pysqlite3-binary
-protobuf
-numpy
-jiter
+openai
+fuzzywuzzy
+python-Levenshtein
