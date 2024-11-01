@@ -21,8 +21,33 @@ openai.api_key = st.secrets.get("openai_api_key")
 if openai.api_key is None:
     st.error("OpenAI API key is missing. Please configure it in Streamlit secrets.")
 
-# Initialize ChromaDB client
-chroma_client = chromadb.Client()  # No need for Config class here
+# **Insert the check_password() function here**
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == st.secrets["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Remove password from session state
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # First run, show input for password.
+        st.text_input("Enter password", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        # Password not correct, show input + error.
+        st.text_input("Enter password", type="password", on_change=password_entered, key="password")
+        st.error("😕 Password incorrect")
+        return False
+    else:
+        # Password correct.
+        return True
+    
+# **Wrap the main app code inside the if check_password(): block**
+if check_password():
+
+    # Initialize ChromaDB client
+    chroma_client = chromadb.Client()  # No need for Config class here
 
 # Set up sidebar for navigation
 st.sidebar.title("Navigation")
