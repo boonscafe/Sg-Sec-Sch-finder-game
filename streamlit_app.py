@@ -72,7 +72,7 @@ devil_agent = Agent(
     role="Raises important questions, prompts critical thinking, and points out potential challenges in each school option",
     tone="Direct, slightly mischievous, uses Singlish with UK spelling",
     dialogue_style="Playful banter and tag-teaming with Angel Bot, Singlish to make conversations relatable",
-    additional_traits="Highlights potential challenges and thought-provoking questions to help users consider practical limitations",
+    additional_traits="Highlights potential challenges and thought-provoking questions to help users consider practical limitations, like distance, friends",
     goal="To ensure students make well-considered, practical school choices",
     backstory="A practical advisor who values logical decision-making and enjoys challenging students to think realistically."
 )
@@ -88,11 +88,18 @@ student_councillor_agent = Agent(
     backstory="A reliable source of educational information with extensive experience in the school system."
 )
 
-# Define more trigger phrases for Angel and Devil
+# Define trigger phrases for Angel and Devil
+angel_devil_triggers = [
+    "I need the Angel and Devil to weigh in", "I'm not sure", "not sure leh",
+    "both perspectives", "different opinions", "angel and devil",
+    "good and bad", "pros and cons", "positive and negative"
+]
+
+# Define function to check if prompt is similar to trigger phrases
 def is_similar_to_trigger(prompt, trigger_phrases):
     try:
         response = openai.chat.completions.create(
-            model="gpt-4o",  
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that determines if sentences are similar in meaning."},
                 {"role": "user", "content": f"Is the following sentence similar in meaning to any of these: {', '.join(trigger_phrases)}? \n\n Sentence: '{prompt}'"}
@@ -105,27 +112,6 @@ def is_similar_to_trigger(prompt, trigger_phrases):
         print(f"Error with OpenAI API: {e}")
         return False
 
-# Enhanced function to get response type
-def get_response_type(prompt):
-    st.write(f"Evaluating response type for prompt: {prompt}")
-    
-    angel_and_devil_triggers = [
-        "I need the Angel and Devil to weigh in", 
-        "both perspectives", "different opinions", "angel and devil", 
-        "good and bad", "pros and cons", "positive and negative"
-    ]
-    
-    if is_similar_to_trigger(prompt, angel_and_devil_triggers):
-        st.write("Response type set to: angel_and_devil")
-        return "angel_and_devil"
-    elif "ask student councillor" in prompt.lower() or is_informational_query(prompt):
-        st.write("Response type set to: student_councillor")
-        return "student_councillor"
-    else:
-        st.write("Defaulting to response type: student_councillor")
-        return "student_councillor"
-
-
 # Function to check if the prompt is informational
 def is_informational_query(prompt):
     informational_keywords = ["program", "CCA", "school info", "subject", "facility", "details"]
@@ -133,10 +119,11 @@ def is_informational_query(prompt):
     st.write(f"Prompt informational check: {is_informational}")
     return is_informational
 
-# Function to get the response type
+# Enhanced function to get response type
 def get_response_type(prompt):
     st.write(f"Evaluating response type for prompt: {prompt}")
-    if is_similar_to_trigger(prompt, "I need the Angel and Devil to weigh in"):
+
+    if is_similar_to_trigger(prompt, angel_devil_triggers):
         st.write("Response type set to: angel_and_devil")
         return "angel_and_devil"
     elif "ask student councillor" in prompt.lower() or is_informational_query(prompt):
@@ -146,36 +133,40 @@ def get_response_type(prompt):
         st.write("Defaulting to response type: student_councillor")
         return "student_councillor"
 
+# Function to determine whether to invoke Angel and Devil
+def should_invoke_angel_and_devil(prompt, trigger_phrases):
+    return is_similar_to_trigger(prompt, trigger_phrases)
+
 # Function to generate a smart reply from OpenAI with initial prompt if the query is vague
 def generate_openai_response(agent_name, prompt):
     context_message = ("You are assisting a student with finding the right secondary school. "
                        "Keep responses focused on school recommendations. Use Singapore schools only. "
-                       "List each recommendation as bullet points. Talk about their strengths, interests, and special programmes.")
-    
+                       "List each recommendation as bullet points. Ask about their strengths, interests, and if they have any special programmes in mind.")
+
     # Check if the prompt is vague and prompt the user for more information if needed
     vague_prompts = ["how do I start?", "how to choose?", "help me find a school", "what should I do?"]
-    if prompt.lower() in vague_prompts:
+    if any(vague_prompt in prompt.lower() for vague_prompt in vague_prompts):
         return "Could you tell me a bit about your interests, strengths, or any preferences you have in a school? This will help me tailor my recommendations to suit you better."
 
     try:
         # Requesting response from OpenAI API
         response = openai.chat.completions.create(
-            model="gpt-4o",  # Specify your model here
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": f"You are {agent_name}. {context_message}"},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=300,
+            max_tokens=350,
             temperature=0.7
         )
 
-        # Extract the content from the response by accessing the first choice
+        # Extract the content from the response
         if response.choices and len(response.choices) > 0:
-            choice = response.choices[0]  # Access the first Choice object
+            choice = response.choices[0]
             if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
                 openai_response = choice.message.content.strip()
                 print("OpenAI API response content:\n", openai_response)
-                st.write("OpenAI API response content:", openai_response)  # Streamlit output
+                st.write("OpenAI API response content:", openai_response)
                 return openai_response
             else:
                 raise ValueError("Unexpected response structure: 'message' or 'content' missing.")
@@ -186,14 +177,14 @@ def generate_openai_response(agent_name, prompt):
         print(f"Error with OpenAI API for {agent_name}: {e}")
         st.write(f"Error with OpenAI API for {agent_name}: {e}")
         return "I'm having trouble generating a response right now. Please try again later."
-         
+
 from fuzzywuzzy import fuzz  # Import for partial string matching
 import requests
 
 # Function to retrieve transport information based on keywords
 def get_transport_info(prompt):
-    dataset_id = "d_688b934f82c1059ed0a6993d2a829089"
-    url = f"https://data.gov.sg/api/action/datastore_search?resource_id={dataset_id}&limit=360"  # Set limit to 360 to get all records at once
+    dataset_id = "c5b440d1-51c6-466c-bf91-0633266ab9c3"  # Corrected resource_id
+    url = f"https://data.gov.sg/api/action/datastore_search?resource_id={dataset_id}&limit=360"
 
     try:
         response = requests.get(url)
@@ -223,6 +214,12 @@ def get_transport_info(prompt):
     except Exception as e:
         print(f"Error retrieving data: {e}")
         return f"Failed to retrieve transport data: {e}"
+
+# Function to search PSLE info
+def search_psle_info(prompt):
+    # Placeholder function for PSLE info search
+    # Implement the actual logic to fetch PSLE info based on the prompt
+    return "PSLE score ranges vary by school. Please refer to the MOE website for the most recent information."
 
 # Enhanced transport-related keyword detection
 def get_student_councillor_response(prompt):
@@ -261,7 +258,7 @@ def get_student_councillor_response(prompt):
 
 # Query for school collection data
 def get_school_collection_data():
-    collectionId = 457          
+    collectionId = 457
     url = f"https://api-production.data.gov.sg/v2/public/api/collections/{collectionId}/metadata"
     try:
         response = requests.get(url)
@@ -273,48 +270,57 @@ def get_school_collection_data():
         st.error(f"Failed to fetch school data: {e}")
         return {"error": "Failed to fetch data from OpenAPI."}
 
-# Main interaction
+# Determine if Angel and Devil should weigh in on Student Councillor response
+def angel_and_devil_weigh_in(prompt):
+    """Trigger Angel and Devil responses if prompt meets criteria."""
+    if should_invoke_angel_and_devil(prompt, angel_devil_triggers):
+        st.write("Triggering Angel and Devil responses...")
+
+        student_councillor_response = get_student_councillor_response(prompt)
+
+        angel_prompt = f"The Student Councillor said: '{student_councillor_response}' Now provide your perspective."
+        angel_response = generate_openai_response("Angel", angel_prompt)
+
+        devil_prompt = (
+            f"The Student Councillor said: '{student_councillor_response}', "
+            f"and Angel added: '{angel_response}'. Now respond with your perspective."
+        )
+        devil_response = generate_openai_response("Devil", devil_prompt)
+
+        st.session_state["messages"].append({"role": "Student Councillor Bot", "content": student_councillor_response})
+        with st.chat_message("Student Councillor Bot"):
+            st.markdown(student_councillor_response)
+
+        st.session_state["messages"].append({"role": "Angel Bot", "content": angel_response})
+        with st.chat_message("Angel Bot"):
+            st.markdown(angel_response)
+
+        st.session_state["messages"].append({"role": "Devil Bot", "content": devil_response})
+        with st.chat_message("Devil Bot"):
+            st.markdown(devil_response)
+    else:
+        # If not invoking Angel and Devil, just get the Student Councillor's response
+        student_councillor_response = get_student_councillor_response(prompt)
+        st.session_state["messages"].append({"role": "Student Councillor Bot", "content": student_councillor_response})
+        with st.chat_message("Student Councillor Bot"):
+            st.markdown(student_councillor_response)
+
+# Main interaction function in Streamlit
 if prompt := st.chat_input("How can I help you with your school search?"):
     st.session_state["messages"].append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # Get response type
     response_type = get_response_type(prompt)
-
-    try:
-        if response_type == "student_councillor":
-            response_text = get_student_councillor_response(prompt)
-            agent_name = "Student Councillor Bot"
-            with st.chat_message(agent_name):
-                st.markdown(response_text)
-            st.session_state["messages"].append({"role": agent_name, "content": response_text})
-
-        elif response_type == "angel_and_devil":
-            councillor_response = get_student_councillor_response(prompt)
-            st.write(f"Student Councillor's response: {councillor_response}")
-            st.session_state["messages"].append({"role": "Student Councillor Bot", "content": councillor_response})
-
-            with st.chat_message("Student Councillor Bot"):
-                st.markdown(councillor_response)
-
-            angel_prompt = f"The Student Councillor said: '{councillor_response}' Now provide your perspective."
-            angel_response = generate_openai_response("Angel", angel_prompt)
-            st.write(f"Angel's response: {angel_response}")
-            if angel_response:
-                st.session_state["messages"].append({"role": "Angel Bot", "content": angel_response})
-                with st.chat_message("Angel Bot"):
-                    st.markdown(angel_response)
-
-            devil_prompt = f"The Student Councillor said: '{councillor_response}', and Angel added: '{angel_response}'. Now respond with your perspective."
-            devil_response = generate_openai_response("Devil", devil_prompt)
-            st.write(f"Devil's response: {devil_response}")
-            if devil_response:
-                st.session_state["messages"].append({"role": "Devil Bot", "content": devil_response})
-                with st.chat_message("Devil Bot"):
-                    st.markdown(devil_response)
-
-    except Exception as e:
-        st.error(f"An error occurred while fetching responses: {e}")
+    if response_type == "angel_and_devil":
+        angel_and_devil_weigh_in(prompt)
+    else:
+        # Default to Student Councillor
+        student_councillor_response = get_student_councillor_response(prompt)
+        st.session_state["messages"].append({"role": "Student Councillor Bot", "content": student_councillor_response})
+        with st.chat_message("Student Councillor Bot"):
+            st.markdown(student_councillor_response)
 
 # Disclaimer section at the bottom of the page
 with st.expander("IMPORTANT NOTICE"):
